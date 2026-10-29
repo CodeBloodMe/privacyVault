@@ -1,0 +1,89 @@
+name: PrivacyVault CI/CD & Automated Verification Pipeline
+
+# Student Authors: KRISH (24BCE0846) & PARV (24BCE0870)
+# Course: BCSE302P Database Systems Lab (Slot L25+L26)
+# Faculty Guide: Dr. V. SIVAKUMAR
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  backend-and-database:
+    name: Database Integrity & Gateway Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: privacyvault
+          POSTGRES_USER: privacyvault_admin
+          POSTGRES_PASSWORD: AdminSuperSecretPassword2026!
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Backend & Testing Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Initialize PostgreSQL 17 Database Schema & Stored Procedures
+        env:
+          PGPASSWORD: AdminSuperSecretPassword2026!
+        run: |
+          psql -h localhost -p 5434 -U privacyvault_admin -d privacyvault -f database/init/01_init_roles_and_extensions.sql
+          psql -h localhost -p 5434 -U privacyvault_admin -d privacyvault -f database/init/02_schema_ddl.sql
+          psql -h localhost -p 5434 -U privacyvault_admin -d privacyvault -f database/init/03_stored_procedures_and_triggers.sql
+
+      - name: Seed Synthetic Clinical Research Microdata (10,000 Records)
+        run: |
+          python database/seed/seed_data.py
+
+      - name: Execute Full Automated Integration & Security Test Suite
+        run: |
+          python -m pytest backend/tests/ -v -s
+
+      - name: Execute Academic Demonstration Script (Scenarios A through H)
+        run: |
+          python database/scripts/run_demo_scenarios.py
+
+  frontend-build:
+    name: Frontend Build & Typecheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run Production Bundle Build (Vite + TypeScript)
+        working-directory: frontend
+        run: npm run build

@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: privacyvault-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: privacyvault
+      POSTGRES_USER: privacyvault_admin
+      POSTGRES_PASSWORD: AdminSuperSecretPassword2026!
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata_pv:/var/lib/postgresql/data
+      - ../database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U privacyvault_admin -d privacyvault"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - pv-network
+
+volumes:
+  pgdata_pv:
+    driver: local
+
+networks:
+  pv-network:
+    driver: bridge

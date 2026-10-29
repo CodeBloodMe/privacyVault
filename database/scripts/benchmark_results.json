@@ -1,0 +1,27 @@
+{
+  "index_benchmark": {
+    "indexed_node": "Aggregate",
+    "indexed_time_ms": 0.709,
+    "seq_scan_node": "Aggregate",
+    "seq_scan_time_ms": 1.263,
+    "speedup_pct": 43.86
+  },
+  "aggregation_benchmarks": {
+    "trials": 100,
+    "avg_latency_ms": 2.34,
+    "min_latency_ms": 2.11,
+    "max_latency_ms": 6.52,
+    "p95_latency_ms": 2.55,
+    "throughput_qps": 428.1
+  },
+  "stored_procedure_benchmarks": {
+    "trials": 50,
+    "avg_sp_latency_ms": 1.71,
+    "p95_sp_latency_ms": 2.05
+  },
+  "views_benchmarks": {
+    "v_dataset_metadata_catalog_ms": 0.475,
+    "v_analyst_budget_summary_ms": 0.121,
+    "v_audit_summary_log_ms": 0.099
+  }
+}

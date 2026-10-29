@@ -1,0 +1,21 @@
+# PrivacyVault — Backend Production & Testing Dependencies
+# Student Authors: KRISH (24BCE0846) & PARV (24BCE0870)
+# Course: BCSE302P Database Systems Lab (Slot L25+L26)
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+email-validator>=2.2.0
+python-multipart>=0.0.20
+
+sqlalchemy>=2.0.36
+psycopg2-binary>=2.9.10
+alembic>=1.14.0
+
+opendp>=0.16.0
+bcrypt>=4.2.0
+pyjwt>=2.9.0
+
+pytest>=8.3.0
+httpx>=0.28.0
