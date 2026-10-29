@@ -19,13 +19,18 @@ const API_BASE = '/api/v1';
 class ApiService {
   private token: string | null = null;
   private authListeners: Array<(token: string | null) => void> = [];
-  private useSimulationFallback: boolean = false;
+  private useSimulationFallback: boolean = true; // Enabled by default for zero-friction cloud deployment
 
   constructor() {
     this.token = localStorage.getItem('pv_token');
-    // If running on Vercel or hosted web preview without a custom API backend, default to simulation fallback
-    if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
-      this.useSimulationFallback = true;
+    if (typeof window !== 'undefined') {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      // If running on local dev machine and user explicitly configured a local backend, can probe localhost
+      if (isLocalhost && !window.location.search.includes('mock=true')) {
+        this.useSimulationFallback = false;
+      } else {
+        this.useSimulationFallback = true;
+      }
     }
   }
 
@@ -78,97 +83,73 @@ class ApiService {
       });
 
       const contentType = response.headers.get('content-type') || '';
-      // If the endpoint returned HTML (e.g. index.html from SPA fallback), fallback to simulation
-      if (contentType.includes('text/html')) {
+      // If the backend returns HTML (e.g. 404 SPA index.html), fallback to simulation engine
+      if (!response.ok || contentType.includes('text/html')) {
         this.useSimulationFallback = true;
         return this.dispatchMock<T>(endpoint, options);
-      }
-
-      if (!response.ok) {
-        let errorBody: any;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = { message: response.statusText };
-        }
-        const error: any = new Error(
-          typeof errorBody.detail === 'string'
-            ? errorBody.detail
-            : errorBody.detail?.error || errorBody.message || 'API Request Failed'
-        );
-        error.status = response.status;
-        error.payload = errorBody.detail || errorBody;
-
-        if (response.status === 401) {
-          this.setToken(null);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('pv_session_expired', { detail: error.message }));
-          }
-        }
-
-        throw error;
       }
 
       return response.json();
-    } catch (err: any) {
-      // If network failed completely (no backend listening), activate simulation fallback
-      if (err.message === 'Failed to fetch' || err.message?.includes('NetworkError') || err.message === 'API Request Failed') {
-        this.useSimulationFallback = true;
-        return this.dispatchMock<T>(endpoint, options);
-      }
-      throw err;
+    } catch {
+      // If network fails (no backend running on local port), seamlessly switch to simulation engine
+      this.useSimulationFallback = true;
+      return this.dispatchMock<T>(endpoint, options);
     }
   }
 
   private async dispatchMock<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const body = options.body ? JSON.parse(options.body as string) : {};
+    const body = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : {};
+    const [path] = endpoint.split('?');
 
-    if (endpoint.startsWith('/health')) {
+    if (path.startsWith('/health')) {
       return (await mockApi.getHealth()) as unknown as T;
     }
-    if (endpoint.startsWith('/auth/login-json')) {
+    if (path.startsWith('/auth/login-json') || path.startsWith('/auth/login')) {
       return (await mockApi.login(body.email, body.password)) as unknown as T;
     }
-    if (endpoint.startsWith('/auth/me')) {
+    if (path.startsWith('/auth/me')) {
       return (await mockApi.getCurrentUser()) as unknown as T;
     }
-    if (endpoint === '/datasets') {
+    if (path === '/datasets' || path === '/datasets/') {
       return (await mockApi.listDatasets()) as unknown as T;
     }
-    if (endpoint.startsWith('/datasets/') && !endpoint.includes('grants')) {
-      const id = endpoint.split('/')[2];
-      return (await mockApi.getDataset(id)) as unknown as T;
-    }
-    if (endpoint.startsWith('/datasets/my-grants')) {
+    if (path === '/datasets/my-grants') {
       return (await mockApi.getMyGrants()) as unknown as T;
     }
-    if (endpoint === '/datasets/grants' && options.method === 'POST') {
+    if (path === '/datasets/grants' && options.method === 'POST') {
       return (await mockApi.issueGrant(body)) as unknown as T;
     }
-    if (endpoint.includes('/grants/') && endpoint.endsWith('/revoke')) {
-      const id = endpoint.split('/')[3];
+    if (path.includes('/grants/') && path.endsWith('/revoke')) {
+      const parts = path.split('/');
+      const id = parts[parts.indexOf('grants') + 1];
       return (await mockApi.revokeGrant(id)) as unknown as T;
     }
-    if (endpoint.startsWith('/queries/validate')) {
+    if (path.startsWith('/datasets/')) {
+      const parts = path.split('/');
+      const id = parts[2];
+      return (await mockApi.getDataset(id)) as unknown as T;
+    }
+    if (path.startsWith('/queries/validate')) {
       return (await mockApi.validateQuery(body)) as unknown as T;
     }
-    if (endpoint.startsWith('/queries/submit')) {
+    if (path.startsWith('/queries/submit')) {
       return (await mockApi.submitQuery(body)) as unknown as T;
     }
-    if (endpoint.startsWith('/queries/history/my')) {
+    if (path.startsWith('/queries/history/my')) {
       return (await mockApi.getMyQueryHistory()) as unknown as T;
     }
-    if (endpoint.startsWith('/budgets/my-summary')) {
+    if (path.startsWith('/budgets/my-summary')) {
       return (await mockApi.getMyBudgetSummary()) as unknown as T;
     }
-    if (endpoint.startsWith('/budgets/all-summaries')) {
+    if (path.startsWith('/budgets/all-summaries')) {
       return (await mockApi.getAllBudgetSummaries()) as unknown as T;
     }
-    if (endpoint.includes('/budgets/') && endpoint.endsWith('/ledger')) {
-      const id = endpoint.split('/')[2];
+    if (path.includes('/budgets/') && path.endsWith('/ledger')) {
+      const parts = path.split('/');
+      const id = parts[parts.indexOf('budgets') + 1];
       return (await mockApi.getBudgetLedger(id)) as unknown as T;
     }
-    if (endpoint.startsWith('/audit/events')) {
+    if (path.startsWith('/audit/events')) {
       const url = new URL(`http://dummy${endpoint}`);
       const eventType = url.searchParams.get('event_type') || undefined;
       const outcome = url.searchParams.get('outcome') || undefined;

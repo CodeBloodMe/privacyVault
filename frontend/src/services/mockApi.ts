@@ -39,6 +39,14 @@ const MOCK_USERS: Record<string, UserProfile> = {
     roles: ['DATA_OWNER', 'ADMIN'],
     created_at: '2026-01-01T08:00:00Z'
   },
+  'dr.sivakumar@vit.ac.in': {
+    id: 'usr-owner-03',
+    email: 'dr.sivakumar@vit.ac.in',
+    full_name: 'Dr. V. Sivakumar (Chief Data Officer)',
+    is_active: true,
+    roles: ['DATA_OWNER', 'ADMIN'],
+    created_at: '2026-01-01T08:00:00Z'
+  },
   'auditor@privacyvault.local': {
     id: 'usr-auditor-04',
     email: 'auditor@privacyvault.local',
@@ -46,6 +54,22 @@ const MOCK_USERS: Record<string, UserProfile> = {
     is_active: true,
     roles: ['AUDITOR'],
     created_at: '2026-01-05T08:30:00Z'
+  },
+  'compliance.auditor@vit.ac.in': {
+    id: 'usr-auditor-04',
+    email: 'compliance.auditor@vit.ac.in',
+    full_name: 'Lead Compliance Auditor',
+    is_active: true,
+    roles: ['AUDITOR'],
+    created_at: '2026-01-05T08:30:00Z'
+  },
+  'admin@privacyvault.local': {
+    id: 'usr-admin-05',
+    email: 'admin@privacyvault.local',
+    full_name: 'System Administrator',
+    is_active: true,
+    roles: ['ADMIN', 'DATA_OWNER', 'ANALYST', 'AUDITOR'],
+    created_at: '2026-01-01T00:00:00Z'
   }
 };
 
@@ -66,7 +90,8 @@ const MOCK_DATASET: Dataset = {
     { id: 'c5', column_name: 'admission_type', data_type: 'VARCHAR(20)', is_sensitive: false, is_identifier: false, is_aggregatable: true },
     { id: 'c6', column_name: 'diagnosis_code', data_type: 'VARCHAR(10)', is_sensitive: true, is_identifier: false, is_aggregatable: true },
     { id: 'c7', column_name: 'systolic_bp', data_type: 'INTEGER', is_sensitive: false, is_identifier: false, is_aggregatable: true, min_bound: 80, max_bound: 220 },
-    { id: 'c8', column_name: 'los_days', data_type: 'INTEGER', is_sensitive: false, is_identifier: false, is_aggregatable: true, min_bound: 1, max_bound: 60 }
+    { id: 'c8', column_name: 'los_days', data_type: 'INTEGER', is_sensitive: false, is_identifier: false, is_aggregatable: true, min_bound: 1, max_bound: 60 },
+    { id: 'c9', column_name: 'treatment_cost', data_type: 'NUMERIC(10,2)', is_sensitive: false, is_identifier: false, is_aggregatable: true, min_bound: 100, max_bound: 150000 }
   ],
   active_policy: {
     id: 'pol-hipaa-01',
