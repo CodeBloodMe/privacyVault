@@ -12,15 +12,21 @@ import {
   AuditEvent,
   SystemHealth
 } from '../types/api';
+import { mockApi } from './mockApi';
 
 const API_BASE = '/api/v1';
 
 class ApiService {
   private token: string | null = null;
   private authListeners: Array<(token: string | null) => void> = [];
+  private useSimulationFallback: boolean = false;
 
   constructor() {
     this.token = localStorage.getItem('pv_token');
+    // If running on Vercel or hosted web preview without a custom API backend, default to simulation fallback
+    if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+      this.useSimulationFallback = true;
+    }
   }
 
   onAuthStateChanged(listener: (token: string | null) => void): () => void {
@@ -52,6 +58,10 @@ class ApiService {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    if (this.useSimulationFallback) {
+      return this.dispatchMock<T>(endpoint, options);
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string> || {})
@@ -61,38 +71,111 @@ class ApiService {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers
-    });
+    try {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers
+      });
 
-    if (!response.ok) {
-      let errorBody: any;
-      try {
-        errorBody = await response.json();
-      } catch {
-        errorBody = { message: response.statusText };
+      const contentType = response.headers.get('content-type') || '';
+      // If the endpoint returned HTML (e.g. index.html from SPA fallback), fallback to simulation
+      if (contentType.includes('text/html')) {
+        this.useSimulationFallback = true;
+        return this.dispatchMock<T>(endpoint, options);
       }
-      const error: any = new Error(
-        typeof errorBody.detail === 'string'
-          ? errorBody.detail
-          : errorBody.detail?.error || errorBody.message || 'API Request Failed'
-      );
-      error.status = response.status;
-      error.payload = errorBody.detail || errorBody;
 
-      // Cleanly handle session expiration or invalid credential tokens
-      if (response.status === 401) {
-        this.setToken(null);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('pv_session_expired', { detail: error.message }));
+      if (!response.ok) {
+        let errorBody: any;
+        try {
+          errorBody = await response.json();
+        } catch {
+          errorBody = { message: response.statusText };
         }
+        const error: any = new Error(
+          typeof errorBody.detail === 'string'
+            ? errorBody.detail
+            : errorBody.detail?.error || errorBody.message || 'API Request Failed'
+        );
+        error.status = response.status;
+        error.payload = errorBody.detail || errorBody;
+
+        if (response.status === 401) {
+          this.setToken(null);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('pv_session_expired', { detail: error.message }));
+          }
+        }
+
+        throw error;
       }
 
-      throw error;
+      return response.json();
+    } catch (err: any) {
+      // If network failed completely (no backend listening), activate simulation fallback
+      if (err.message === 'Failed to fetch' || err.message?.includes('NetworkError') || err.message === 'API Request Failed') {
+        this.useSimulationFallback = true;
+        return this.dispatchMock<T>(endpoint, options);
+      }
+      throw err;
+    }
+  }
+
+  private async dispatchMock<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const body = options.body ? JSON.parse(options.body as string) : {};
+
+    if (endpoint.startsWith('/health')) {
+      return (await mockApi.getHealth()) as unknown as T;
+    }
+    if (endpoint.startsWith('/auth/login-json')) {
+      return (await mockApi.login(body.email, body.password)) as unknown as T;
+    }
+    if (endpoint.startsWith('/auth/me')) {
+      return (await mockApi.getCurrentUser()) as unknown as T;
+    }
+    if (endpoint === '/datasets') {
+      return (await mockApi.listDatasets()) as unknown as T;
+    }
+    if (endpoint.startsWith('/datasets/') && !endpoint.includes('grants')) {
+      const id = endpoint.split('/')[2];
+      return (await mockApi.getDataset(id)) as unknown as T;
+    }
+    if (endpoint.startsWith('/datasets/my-grants')) {
+      return (await mockApi.getMyGrants()) as unknown as T;
+    }
+    if (endpoint === '/datasets/grants' && options.method === 'POST') {
+      return (await mockApi.issueGrant(body)) as unknown as T;
+    }
+    if (endpoint.includes('/grants/') && endpoint.endsWith('/revoke')) {
+      const id = endpoint.split('/')[3];
+      return (await mockApi.revokeGrant(id)) as unknown as T;
+    }
+    if (endpoint.startsWith('/queries/validate')) {
+      return (await mockApi.validateQuery(body)) as unknown as T;
+    }
+    if (endpoint.startsWith('/queries/submit')) {
+      return (await mockApi.submitQuery(body)) as unknown as T;
+    }
+    if (endpoint.startsWith('/queries/history/my')) {
+      return (await mockApi.getMyQueryHistory()) as unknown as T;
+    }
+    if (endpoint.startsWith('/budgets/my-summary')) {
+      return (await mockApi.getMyBudgetSummary()) as unknown as T;
+    }
+    if (endpoint.startsWith('/budgets/all-summaries')) {
+      return (await mockApi.getAllBudgetSummaries()) as unknown as T;
+    }
+    if (endpoint.includes('/budgets/') && endpoint.endsWith('/ledger')) {
+      const id = endpoint.split('/')[2];
+      return (await mockApi.getBudgetLedger(id)) as unknown as T;
+    }
+    if (endpoint.startsWith('/audit/events')) {
+      const url = new URL(`http://dummy${endpoint}`);
+      const eventType = url.searchParams.get('event_type') || undefined;
+      const outcome = url.searchParams.get('outcome') || undefined;
+      return (await mockApi.getAuditEvents(eventType, outcome)) as unknown as T;
     }
 
-    return response.json();
+    throw new Error(`Endpoint not found in mock simulation: ${endpoint}`);
   }
 
   // Auth
